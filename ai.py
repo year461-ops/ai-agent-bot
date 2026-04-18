@@ -4,7 +4,7 @@ import google.generativeai as genai
 
 genai.configure(api_key=os.getenv("GEMINI_API_KEY"))
 
-MODEL_NAME = "models/gemini-2.5-flash"
+MODEL_NAME = "gemini-1.5-flash"  # ← 改這個
 
 def ask_llm(prompt):
     try:
@@ -12,13 +12,10 @@ def ask_llm(prompt):
 
         response = model.generate_content(prompt)
 
-        if not response:
-            return "❌ 沒有 response（可能被擋）"
+        if response and response.text:
+            return response.text
 
-        if not hasattr(response, "text"):
-            return f"❌ 沒有 text 欄位: {response}"
-
-        return response.text
+        return "AI 無回應"
 
     except Exception as e:
-        return f"🔥 Gemini錯誤：{str(e)}"
+        return f"Gemini錯誤：{str(e)}"
