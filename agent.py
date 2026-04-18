@@ -1,62 +1,34 @@
-# agent.py
-import time
 from tools import get_stock_report
-from ai import ask_llm
+from ai import generate_with_infinite_fallback # 🎯 關鍵：把你的接力函式 import 進來
 
-# 快取（同一標的短時間內不重算）
-CACHE = {}
-TTL_SEC = 900  # 15分鐘
-
-def _get_cache(key):
-    v = CACHE.get(key)
-    if not v:
-        return None
-    data, ts = v
-    if time.time() - ts > TTL_SEC:
-        return None
-    return data
-
-def _set_cache(key, value):
-    CACHE[key] = (value, time.time())
-
-def run_agent(ticker: str) -> str:
-    # 1) 先看快取
-    cached = _get_cache(ticker)
-    if cached:
-        return cached
-
-    # 2) 數據計算
+def run_agent(ticker):
+    # 1. 先去 tools.py 抓技術指標資料
     data = get_stock_report(ticker)
+    
     if not data:
-        return f"❌ 找不到 {ticker} 數據"
+        return f"❌ 找不到 {ticker} 的近期有效資料，請確認代碼是否正確。"
 
-    # 3) prompt（控制長度，避免被擋）
-    prompt = f"""
-標的：{data['id']}（現價 {data['price']}）
-24D乖離：{data['bias']:.2f}%
-歷史區間：{data['low']:.1f}% ~ {data['high']:.1f}%
-狀態：{data['status']}
-
-用「資深量化操盤手」語氣，120字內：
-1. 判斷目前水位
-2. 給具體策略（買/觀望/減碼）
+    # 2. 組合出你要發送給 AI 的戰略報告版型
+    report_text = f"""📊 {data['id']} 戰略診斷
+━━━━━━━━━━━━
+💰 現價：{data['price']}
+📈 乖離：{data['bias']}%
+📏 區間：{data['low']}% ~ {data['high']}%
+🚩 狀態：{data['status']}
 """
 
-    # 4) 呼叫 AI
-    ai_text = ask_llm(prompt)
+    # 3. 組合 Prompt (告訴 AI 它該做什麼)
+    prompt = f"""
+    以下是股市資料：
+    {report_text}
+    
+    請以「資深操盤手」的語氣，根據上述乖離率與狀態，給出 50 字以內的精準操作建議，直接輸出建議文字即可。
+    """
 
-    # 5) 組合輸出
-    report = (
-        f"📊 {data['id']} 戰略診斷\n"
-        f"━━━━━━━━━━━━\n"
-        f"💰 現價：{data['price']}\n"
-        f"📈 乖離：{data['bias']:.2f}%\n"
-        f"📏 區間：{data['low']:.1f}% ~ {data['high']:.1f}%\n"
-        f"🚩 狀態：{data['status']}\n\n"
-        f"🤖 操盤手：\n{ai_text}"
-    )
+    # 4. 🚀 將 Prompt 丟給你的「無限接力榨汁機」處理
+    ai_advice = generate_with_infinite_fallback(prompt)
 
-    # 6) 寫入快取
-    _set_cache(ticker, report)
-
-    return report
+    # 5. 將原本的數據和 AI 的分析拼在一起，回傳給 main.py 去發 Telegram
+    final_output = f"{report_text}\n🤖 操盤手：\n{ai_advice}"
+    
+    return final_output
