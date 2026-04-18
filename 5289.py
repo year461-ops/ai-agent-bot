@@ -8,6 +8,7 @@ from rich.console import Console
 from rich.table import Table
 from rich.live import Live
 
+# 確保基礎套件
 try:
     import yfinance as yf
     from FinMind.data import DataLoader
@@ -17,25 +18,23 @@ except ImportError:
     exit()
 
 # ========================
-# 🔧 關鍵配置區 (地址已校準)
+# 🔧 配置區 (已校準戰情群組 ID)
 # ========================
 TELEGRAM_TOKEN = "8604408924:AAFDIhFyiMpSZ5KnzqW7JgTDf4SY9i6PJxA"
-
-# 同時發送給個人 ID 與 戰情群組 ID
 CHAT_IDS = ["785298601", "-1003968728718"] 
 
 TICKER_GROUPS = {
-    "⭐ 核心持股": ["5289"],
-    "🏢 宜鼎生態系 (IPC/儲存)": ["2395", "6414", "3088", "MU"],
-    "🚀 AI/半導體主流": ["NVDA", "2330", "2382", "6669", "3231"],
-    "🌍 大盤與產業指標": ["^TWII", "^SOX", "ONDS"] 
+    "🌍 全球大盤指標": ["^TWII", "^SOX", "QQQ"],
+    "💎 半導體三巨頭": ["2330", "NVDA", "ASML"],
+    "🚀 AI 供應鏈核心": ["2382", "6669", "3231"],
+    "📈 戰略成長標的": ["5289", "MU", "ONDS"]
 }
 
 TICKER_NAMES = {
-    "5289": "宜鼎 (核心)", "2395": "研華 (IPC龍頭)", "6414": "樺漢 (IPC大廠)",
-    "3088": "艾訊 (IPC指標)", "MU": "美光 (記憶體風向)", "NVDA": "輝達 (AI領頭羊)",
-    "2330": "臺積電 (權值王)", "2382": "廣達 (AI伺服器)", "6669": "緯穎 (雲端供應)",
-    "3231": "緯創 (AI代工)", "^TWII": "臺股加權指數", "^SOX": "費城半導體指數", "ONDS": "Ondas (邊緣AI傳輸)"
+    "^TWII": "臺股加權", "^SOX": "費半指數", "QQQ": "納斯達克",
+    "2330": "臺積電", "NVDA": "輝達", "ASML": "艾司摩爾",
+    "2382": "廣達", "6669": "緯穎", "3231": "緯創",
+    "5289": "宜鼎", "MU": "美光", "ONDS": "Ondas"
 }
 
 SCAN_INTERVAL = 600
@@ -47,10 +46,8 @@ def send_telegram(message):
     for cid in CHAT_IDS:
         url = f"https://api.telegram.org/bot{TELEGRAM_TOKEN}/sendMessage"
         payload = {"chat_id": cid, "text": message, "parse_mode": "Markdown"}
-        try:
-            requests.post(url, data=payload, timeout=12)
-        except:
-            pass
+        try: requests.post(url, data=payload, timeout=12)
+        except: pass
 
 def analyze_stock(ticker):
     df = None
@@ -77,45 +74,52 @@ def analyze_stock(ticker):
         close_price = df['Close']
         ma24 = close_price.rolling(window=24).mean()
         bias = (close_price - ma24) / ma24 * 100
-        curr_price, curr_bias = float(close_price.iloc[-1]), float(bias.iloc[-1])
+        curr_bias = float(bias.iloc[-1])
+        # 取得過去兩年的 5% 與 95% 分位數作為界限
         low, high = float(bias.quantile(0.05)), float(bias.quantile(0.95))
-        return {"price": curr_price, "bias": curr_bias, "bounds": (low, high)}
+        return {"bias": curr_bias, "bounds": (low, high)}
     except: return None
 
 def monitor_and_sync():
     now_str = datetime.now().strftime('%Y-%m-%d %H:%M:%S')
-    table = Table(title=f"🛡️ 宜鼎戰略監控雷達 ({now_str})", header_style="bold magenta", border_style="bright_blue")
-    table.add_column("群組", style="dim")
+    table = Table(title=f"🛡️ 全球科技戰略監控 ({now_str})", header_style="bold magenta", border_style="bright_blue")
     table.add_column("名稱", style="cyan")
-    table.add_column("24D 乖離", justify="right")
+    table.add_column("目前乖離", justify="right")
+    table.add_column("定義區間 (低~高)", justify="center")
     table.add_column("狀態", justify="center")
 
-    tele_report = f"🛡️ *宜鼎戰略監控報表*\n時間: `{now_str}`\n"
+    tele_report = f"🛡️ *全球科技戰略監控報表*\n時間: `{now_str}`\n"
+    tele_report += "\n📊 *乖離率區間定義 (過去 2 年統計)：*\n"
 
     for group_name, tickers in TICKER_GROUPS.items():
         tele_report += f"\n📌 *{group_name}*\n"
         for ticker in tickers:
             res = analyze_stock(ticker)
             name = TICKER_NAMES.get(ticker, ticker)
-            if not res:
-                table.add_row(group_name, name, "-", "[bold red]讀取失敗[/]")
-                tele_report += f"• `{name}`: ⚠️ 讀取中\n"
-                continue
+            if not res: continue
             
             bias, low, high = res['bias'], res['bounds'][0], res['bounds'][1]
-            if bias <= low: icon, status_text, color = "🔥", "超跌買點", "[bold green]"
-            elif bias >= high: icon, status_text, color = "⚠️", "超買警戒", "[bold red]"
-            else: icon, status_text, color = "⚪", "常態分佈", "[white]"
             
-            table.add_row(group_name, name, f"{bias:.2f}%", f"{color}{status_text}[/]")
-            tele_report += f"{icon} `{name}`: `{bias:.2f}%` -> *{status_text}*\n"
+            if bias <= low:
+                icon, status, color = "🔥", "*超跌買點*", "[bold green]"
+            elif bias >= high:
+                icon, status, color = "⚠️", "*超買警戒*", "[bold red]"
+            else:
+                icon, status, color = "⚪", "常態分佈", "[white]"
+            
+            # 更新 VS Code 表格
+            table.add_row(name, f"{bias:.2f}%", f"{low:.1f}% ~ {high:.1f}%", f"{color}{status}[/]")
+            
+            # 更新 Telegram 報表 (重點：顯示區間)
+            tele_report += f"{icon} `{name}`: `{bias:.2f}%` ({status})\n"
+            tele_report += f"    └ 正常區間: `{low:.1f}%` ~ `{high:.1f}%`\n"
 
     send_telegram(tele_report)
     return table
 
 if __name__ == "__main__":
     threading.Thread(target=lambda: app.run(host='0.0.0.0', port=8080, use_reloader=False), daemon=True).start()
-    console.print("[bold green]🌟 戰情群組同步模式啟動！[/]")
+    console.print("[bold green]🌟 戰略雷達 7.0 啟動：動態區間定義已加入報表！[/]")
     with Live(monitor_and_sync(), refresh_per_second=0.1) as live:
         while True:
             live.update(monitor_and_sync())
