@@ -2,4 +2,4 @@ pyTelegramBotAPI
 google-generativeai
 pandas
 FinMind
-yahooquery
+yfinance
