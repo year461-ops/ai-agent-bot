@@ -1,0 +1,18 @@
+# Python
+__pycache__/
+*.pyc
+
+# build / dist
+build/
+dist/
+*.exe
+*.dll
+*.pyd
+
+# your folders
+stock.build/
+stock.dist/
+stock.onefile-build/
+
+# env
+.env
