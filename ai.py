@@ -6,8 +6,8 @@ genai.configure(api_key=os.getenv("GEMINI_API_KEY"))
 
 def ask_llm(prompt):
     try:
-        # 🔥 直接用穩定模型（不卡）
-        model = genai.GenerativeModel("gemini-1.5-flash")
+        # 🔥 正確模型名稱（要加 models/）
+        model = genai.GenerativeModel("models/gemini-1.5-flash")
 
         res = model.generate_content(
             prompt,
