@@ -14,20 +14,28 @@ def get_stock_report(ticker):
             df = dl.taiwan_stock_daily(stock_id=ticker, start_date=start_date)
 
             if df.empty:
+                print("台股抓不到:", ticker)
                 return None
 
             df = df.rename(columns={'close': 'Close'}).sort_values('date')
 
-        # ===== 美股（改用 yfinance）=====
+        # ===== 美股（穩定版）=====
         else:
-            df = yf.download(ticker, period="2y", interval="1d", progress=False)
+            df = yf.download(
+                ticker,
+                period="2y",
+                interval="1d",
+                auto_adjust=True,
+                threads=False   # 🔥 避免 Railway 卡死
+            )
 
-            if df.empty:
+            if df is None or df.empty:
+                print("美股抓不到:", ticker)
                 return None
 
             df = df.reset_index()
 
-        # ===== 防呆（避免欄位問題）=====
+        # ===== 防呆 =====
         if "Close" not in df.columns:
             return None
 
@@ -39,7 +47,7 @@ def get_stock_report(ticker):
 
         close_price = df["Close"]
 
-        # ===== 技術指標 =====
+        # ===== 指標 =====
         ma24 = close_price.rolling(24).mean()
         bias = (close_price - ma24) / ma24 * 100
 
@@ -47,7 +55,7 @@ def get_stock_report(ticker):
         low = float(bias.quantile(0.05))
         high = float(bias.quantile(0.95))
 
-        # ===== 狀態判斷 =====
+        # ===== 狀態 =====
         status = "⚪ 常態"
         if curr <= low:
             status = "🔥 超跌"
@@ -64,5 +72,5 @@ def get_stock_report(ticker):
         }
 
     except Exception as e:
-        print(f"tools error: {e}")
+        print("tools error:", e)
         return None
