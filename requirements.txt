@@ -2,4 +2,5 @@ pyTelegramBotAPI
 google-generativeai>=0.8.3
 pandas
 FinMind
-yfinance
+yahooquery
+python-dotenv
