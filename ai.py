@@ -2,18 +2,18 @@ import os
 import google.generativeai as genai
 from dotenv import load_dotenv
 
-# 1. 載入 .env 中的金鑰
+# 1. 載入環境變數
 load_dotenv()
 
-# 2. 設定 API Key
+# 2. 配置 API Key (確保 .env 裡有 GEMINI_API_KEY)
 api_key = os.getenv("GEMINI_API_KEY")
 genai.configure(api_key=api_key)
 
 def ask_llm(prompt):
     try:
-        # 3. 使用目前最穩定的模型名稱
-        # 2026 年建議直接使用名稱，不加 "models/"
-        model = genai.GenerativeModel("gemini-1.5-flash")
+        # 3. 2026 年核心模型：Gemini 2.0 Flash
+        # 此模型在 2026 年具備最佳的反應速度與金融數據理解力
+        model = genai.GenerativeModel("gemini-2.0-flash")
 
         res = model.generate_content(
             prompt,
@@ -23,15 +23,17 @@ def ask_llm(prompt):
             }
         )
 
-        # 4. 回傳文字，若被安全過濾則回傳提示
+        # 4. 回傳解析結果
         if res and hasattr(res, 'text'):
             return res.text
         
-        return "AI 內容被屏蔽或未生成文字，請檢查輸入內容。"
+        return "AI 暫時無法回覆，請檢查輸入數據是否正常。"
 
     except Exception as e:
         error_msg = str(e)
-        # 針對 404 錯誤的自動修復建議
+        # 自動識別常見錯誤
         if "404" in error_msg:
-            return "AI錯誤: 找不到模型。請於終端機執行 'pip install -U google-generativeai'。"
+            return "AI錯誤: 找不到模型路徑，請嘗試更新 SDK (pip install -U google-generativeai)。"
+        if "429" in error_msg:
+            return "AI錯誤: 請求過於頻繁 (Quota Exceeded)，請稍後再試。"
         return f"AI錯誤: {error_msg}"

@@ -1,12 +1,14 @@
-# 新建一個 test_data.py 貼上以下內容並執行
-from tools import get_stock_report
+import os
+import google.generativeai as genai
+from dotenv import load_dotenv
 
-# 測試美股
-print("--- 測試美股 TSM ---")
-us_res = get_stock_report("TSM")
-print(us_res)
+load_dotenv()
+genai.configure(api_key=os.getenv("GEMINI_API_KEY"))
 
-# 測試台股
-print("\n--- 測試台股 2330 ---")
-tw_res = get_stock_report("2330")
-print(tw_res)
+print("--- 您的 API Key 目前可使用的模型清單 ---")
+try:
+    for m in genai.list_models():
+        if 'generateContent' in m.supported_generation_methods:
+            print(m.name) # 這裡會輸出像是 models/gemini-3-flash 之類的字串
+except Exception as e:
+    print(f"查詢出錯: {e}")
