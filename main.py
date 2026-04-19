@@ -36,5 +36,5 @@ def auto_scan():
         time.sleep(1800)  # 30分鐘（避免爆 quota）
 
 if __name__ == "__main__":
-    threading.Thread(target=auto_scan, daemon=True).start()
+    #threading.Thread(target=auto_scan, daemon=True).start()
     bot.infinity_polling()
