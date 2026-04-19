@@ -1,18 +1,14 @@
-# Python
+# ===== Python =====
 __pycache__/
 *.pyc
 
-# build / dist
-build/
-dist/
-*.exe
-*.dll
-*.pyd
+# ===== 環境變數（最重要）=====
+.env
 
-# your folders
+# ===== build =====
 stock.build/
 stock.dist/
 stock.onefile-build/
 
-# env
-.env
+# ===== VSCode =====
+.vscode/

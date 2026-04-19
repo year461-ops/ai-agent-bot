@@ -1,40 +1,51 @@
 # main.py
 import os
 import telebot
+import logging
+from dotenv import load_dotenv
 from agent import run_agent
-import threading
-import time
 
-bot = telebot.TeleBot(os.getenv("TELEGRAM_TOKEN"))
+# ===== 基本設定 =====
+load_dotenv()
+logging.basicConfig(level=logging.INFO)
 
-# ===== /ask =====
+TOKEN = os.getenv("TELEGRAM_TOKEN")
+
+if not TOKEN:
+    raise ValueError("❌ TELEGRAM_TOKEN 未設定")
+
+bot = telebot.TeleBot(TOKEN)
+
+# ===== /ask 指令 =====
 @bot.message_handler(commands=['ask'])
 def handle_ask(message):
-    text = message.text.replace("/ask", "").strip()
-    if not text:
-        bot.reply_to(message, "請輸入股票代碼")
-        return
+    try:
+        text = message.text.strip()
 
-    msg = bot.reply_to(message, "分析中...")
-    result = run_agent(text)
+        # 解析指令（支援群組 /ask@botname）
+        parts = text.split()
 
-    bot.edit_message_text(
-        result,
-        chat_id=message.chat.id,
-        message_id=msg.message_id
-    )
+        if len(parts) < 2:
+            bot.reply_to(message, "請輸入股票代碼，例如：/ask 2330")
+            return
 
-# ===== 自動掃描（降頻 + 少標的）=====
-WATCHLIST = ["2330", "NVDA"]  # 先少量
+        ticker = parts[1].strip().upper()
 
-def auto_scan():
-    while True:
-        for t in WATCHLIST:
-            result = run_agent(t)
-            if "🔥" in result or "⚠️" in result:
-                bot.send_message(int(os.getenv("GROUP_CHAT_ID")), result)
-        time.sleep(1800)  # 30分鐘（避免爆 quota）
+        msg = bot.reply_to(message, f"分析 {ticker} 中...")
 
+        result = run_agent(ticker)
+
+        bot.edit_message_text(
+            result,
+            chat_id=message.chat.id,
+            message_id=msg.message_id
+        )
+
+    except Exception as e:
+        logging.error(f"錯誤: {e}")
+        bot.reply_to(message, f"❌ 發生錯誤：{e}")
+
+# ===== 啟動 =====
 if __name__ == "__main__":
-    #threading.Thread(target=auto_scan, daemon=True).start()
+    print("🤖 Bot 啟動中...")
     bot.infinity_polling()
