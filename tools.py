@@ -12,7 +12,6 @@ def get_stock_report(ticker):
     try:
         df = None
 
-        # 台股
         if ticker.isdigit():
             start_date = (datetime.now() - timedelta(days=730)).strftime('%Y-%m-%d')
             df = dl.taiwan_stock_daily(stock_id=ticker, start_date=start_date)
@@ -25,7 +24,6 @@ def get_stock_report(ticker):
                 'Trading_Volume': 'Volume'
             }).sort_values('date')
 
-        # 美股
         else:
             df = yf.download(ticker, period="2y", interval="1d", progress=False)
 
@@ -53,7 +51,6 @@ def get_stock_report(ticker):
         close = df["Close"]
         volume = df["Volume"]
 
-        # 指標
         ma24 = close.rolling(24).mean()
         ma50 = close.rolling(50).mean()
 
@@ -62,7 +59,6 @@ def get_stock_report(ticker):
         low = float(bias.quantile(0.05))
         high = float(bias.quantile(0.95))
 
-        # RSI
         delta = close.diff()
         gain = delta.clip(lower=0).rolling(14).mean()
         loss = -delta.clip(upper=0).rolling(14).mean()
@@ -70,7 +66,6 @@ def get_stock_report(ticker):
         rsi = 100 - (100 / (1 + rs))
         curr_rsi = float(rsi.iloc[-1])
 
-        # 成交量
         vol_avg = volume.rolling(20).mean()
         vol_ratio = float(volume.iloc[-1] / vol_avg.iloc[-1]) if vol_avg.iloc[-1] > 0 else 1
 
@@ -112,72 +107,101 @@ def get_stock_report(ticker):
 
 
 # ========================
-# 基本面（台股 + 美股）
+# 穩定版基本面
 # ========================
 def get_fundamental_score(ticker):
     try:
-        # ===== 台股（FinMind）=====
+        pe = None
+        gross_margin = None
+        revenue_growth = None
+        eps_growth = None
+
+        # ===== 台股 =====
         if ticker.isdigit():
             start_date = (datetime.now() - timedelta(days=900)).strftime('%Y-%m-%d')
 
-            # 營收 YoY
             rev = dl.taiwan_stock_month_revenue(stock_id=ticker, start_date=start_date)
             rev = rev.sort_values("date")
-            revenue_growth = None
-            if len(rev) >= 13:
-                revenue_growth = (rev.iloc[-1]["revenue"] - rev.iloc[-13]["revenue"]) / rev.iloc[-13]["revenue"]
 
-            # EPS
+            if len(rev) >= 13:
+                last = rev.iloc[-1]["revenue"]
+                prev = rev.iloc[-13]["revenue"]
+                if prev != 0:
+                    revenue_growth = (last - prev) / prev
+
             fs = dl.taiwan_stock_financial_statements(stock_id=ticker, start_date=start_date)
+
             eps_df = fs[fs["type"] == "EPS"].sort_values("date")
-            eps_growth = None
             if len(eps_df) >= 8:
                 last4 = eps_df.tail(4)["value"].sum()
                 prev4 = eps_df.tail(8).head(4)["value"].sum()
-                eps_growth = (last4 - prev4) / prev4 if prev4 else None
+                if prev4 != 0:
+                    eps_growth = (last4 - prev4) / prev4
 
-            # 毛利率
             gm_df = fs[fs["type"] == "GrossMargin"].sort_values("date")
-            gross_margin = float(gm_df.iloc[-1]["value"]) / 100 if len(gm_df) > 0 else None
+            if len(gm_df) > 0:
+                gross_margin = float(gm_df.iloc[-1]["value"]) / 100
 
-            # P/E
             pe_df = dl.taiwan_stock_per_pbr(stock_id=ticker, start_date=start_date)
-            pe_df = pe_df.sort_values("date")
-            pe = float(pe_df.iloc[-1]["per"]) if len(pe_df) > 0 else None
+            if len(pe_df) > 0:
+                pe = float(pe_df.iloc[-1]["per"])
 
-        # ===== 美股（yfinance）=====
+        # ===== 美股 =====
         else:
             tk = yf.Ticker(ticker)
-            info = tk.info
+            info = tk.info or {}
 
-            pe = info.get("trailingPE")
+            pe = info.get("trailingPE") or info.get("forwardPE")
             gross_margin = info.get("grossMargins")
 
-            # EPS成長（用 earnings）
             qe = tk.quarterly_earnings
-            eps_growth = None
             if isinstance(qe, pd.DataFrame) and len(qe) >= 8:
                 last4 = qe.tail(4)["Earnings"].sum()
                 prev4 = qe.tail(8).head(4)["Earnings"].sum()
-                eps_growth = (last4 - prev4) / prev4 if prev4 else None
+                if prev4 != 0:
+                    eps_growth = (last4 - prev4) / prev4
 
-            # 營收成長
             qf = tk.quarterly_financials
-            revenue_growth = None
             if isinstance(qf, pd.DataFrame) and "Total Revenue" in qf.index:
                 cols = list(qf.columns)
                 if len(cols) >= 8:
                     last4 = qf.loc["Total Revenue", cols[:4]].sum()
                     prev4 = qf.loc["Total Revenue", cols[4:8]].sum()
-                    revenue_growth = (last4 - prev4) / prev4 if prev4 else None
+                    if prev4 != 0:
+                        revenue_growth = (last4 - prev4) / prev4
 
-        # 評分
+        # ===== 評分（只用有資料的）=====
         score = 0
-        if eps_growth and eps_growth > 0: score += 1
-        if revenue_growth and revenue_growth > 0: score += 1
-        if gross_margin and gross_margin > 0.3: score += 1
-        if pe and 10 <= pe <= 25: score += 1
+        valid = 0
 
+        if eps_growth is not None:
+            valid += 1
+            if eps_growth > 0: score += 1
+
+        if revenue_growth is not None:
+            valid += 1
+            if revenue_growth > 0: score += 1
+
+        if gross_margin is not None:
+            valid += 1
+            if gross_margin > 0.3: score += 1
+
+        if pe is not None:
+            valid += 1
+            if 10 <= pe <= 25: score += 1
+
+        # ===== 無資料 =====
+        if valid == 0:
+            return {
+                "score": 0,
+                "level": "無資料",
+                "pe": None,
+                "gross_margin": None,
+                "revenue_growth": None,
+                "eps_growth": None
+            }
+
+        # ===== 等級 =====
         if score <= 1:
             level = "偏弱"
         elif score <= 3:
@@ -196,4 +220,4 @@ def get_fundamental_score(ticker):
 
     except Exception as e:
         print(e)
-        return {"score": 0, "level": "未知"}
+        return {"score": 0, "level": "無資料"}

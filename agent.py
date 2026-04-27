@@ -21,27 +21,22 @@ def run_agent(ticker):
 ━━━━━━━━━━━━
 💰 現價：{data['price']}
 📈 乖離：{data['bias']}%
-📏 區間：{data['low']}% ~ {data['high']}%
 📊 RSI：{data['rsi']}
 📉 趨勢：{data['trend']}
 📦 量能：{data['volume_ratio']}倍
 🚩 狀態：{data['status']}
 
 🧠 技術評分：{data['score']}/4 → {decision}
-
-🎯 操作區間
-支撐：{data['support']}
-壓力：{data['resistance']}
 """
 
     report += f"""
 📊 基本面分析
 ━━━━━━━━━━━━
 評分：{fund['score']}/4 → {fund['level']}
-P/E：{fund.get('pe', 'N/A')}
-毛利率：{fund.get('gross_margin', 'N/A')}%
-營收成長：{fund.get('revenue_growth', 'N/A')}%
-EPS成長：{fund.get('eps_growth', 'N/A')}%
+P/E：{fund['pe'] if fund['pe'] else '無資料'}
+毛利率：{fund['gross_margin'] if fund['gross_margin'] else '無資料'}%
+營收成長：{fund['revenue_growth'] if fund['revenue_growth'] else '無資料'}%
+EPS成長：{fund['eps_growth'] if fund['eps_growth'] else '無資料'}%
 """
 
     ai_text = ask_ai(data)
