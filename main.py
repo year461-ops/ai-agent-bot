@@ -1,51 +1,58 @@
-# main.py
 import os
 import telebot
-import logging
+import threading
+from flask import Flask
 from dotenv import load_dotenv
 from agent import run_agent
 
-# ===== 基本設定 =====
 load_dotenv()
-logging.basicConfig(level=logging.INFO)
 
 TOKEN = os.getenv("TELEGRAM_TOKEN")
-
-if not TOKEN:
-    raise ValueError("❌ TELEGRAM_TOKEN 未設定")
-
 bot = telebot.TeleBot(TOKEN)
 
-# ===== /ask 指令 =====
+# ========================
+# Flask 保活（Railway必備）
+# ========================
+app = Flask(__name__)
+
+@app.route("/")
+def home():
+    return "Bot is running"
+
+def run_web():
+    app.run(host="0.0.0.0", port=8080)
+
+# ========================
+# Telegram 指令
+# ========================
 @bot.message_handler(commands=['ask'])
 def handle_ask(message):
-    try:
-        text = message.text.strip()
+    parts = message.text.split()
 
-        # 解析指令（支援群組 /ask@botname）
-        parts = text.split()
+    if len(parts) < 2:
+        bot.reply_to(message, "請輸入 /ask 股票代碼")
+        return
 
-        if len(parts) < 2:
-            bot.reply_to(message, "請輸入股票代碼，例如：/ask 2330")
-            return
+    ticker = parts[1].upper()
 
-        ticker = parts[1].strip().upper()
+    msg = bot.reply_to(message, f"分析 {ticker} 中...")
 
-        msg = bot.reply_to(message, f"分析 {ticker} 中...")
+    result = run_agent(ticker)
 
-        result = run_agent(ticker)
+    bot.edit_message_text(
+        result,
+        chat_id=message.chat.id,
+        message_id=msg.message_id
+    )
 
-        bot.edit_message_text(
-            result,
-            chat_id=message.chat.id,
-            message_id=msg.message_id
-        )
-
-    except Exception as e:
-        logging.error(f"錯誤: {e}")
-        bot.reply_to(message, f"❌ 發生錯誤：{e}")
-
-# ===== 啟動 =====
+# ========================
+# 啟動
+# ========================
 if __name__ == "__main__":
-    print("🤖 Bot 啟動中...")
+    print("🚀 Bot 啟動中（含 Web Server）")
+
+    # 🔥 開 Web（Railway需要）
+    threading.Thread(target=run_web).start()
+
+    # 🔥 跑 Telegram
     bot.infinity_polling()
