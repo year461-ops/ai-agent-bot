@@ -9,7 +9,6 @@ def run_agent(ticker):
 
     fund = get_fundamental_score(ticker)
 
-    # 技術面決策
     if data["score"] <= 1:
         decision = "觀望"
     elif data["score"] <= 3:

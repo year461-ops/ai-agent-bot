@@ -53,7 +53,7 @@ def get_stock_report(ticker):
         close = df["Close"]
         volume = df["Volume"]
 
-        # === 指標 ===
+        # 指標
         ma24 = close.rolling(24).mean()
         ma50 = close.rolling(50).mean()
 
@@ -70,32 +70,24 @@ def get_stock_report(ticker):
         rsi = 100 - (100 / (1 + rs))
         curr_rsi = float(rsi.iloc[-1])
 
-        # 量能
+        # 成交量
         vol_avg = volume.rolling(20).mean()
         vol_ratio = float(volume.iloc[-1] / vol_avg.iloc[-1]) if vol_avg.iloc[-1] > 0 else 1
 
-        # 趨勢
         trend = "多頭" if close.iloc[-1] > ma50.iloc[-1] else "空頭"
 
-        # 狀態
         status = "常態"
         if curr_bias <= low:
             status = "超跌"
         elif curr_bias >= high:
             status = "超買"
 
-        # === 多因子 ===
         score = 0
-        if curr_bias <= low:
-            score += 1
-        if curr_rsi < 30:
-            score += 1
-        if close.iloc[-1] > ma50.iloc[-1]:
-            score += 1
-        if vol_ratio > 1.2:
-            score += 1
+        if curr_bias <= low: score += 1
+        if curr_rsi < 30: score += 1
+        if close.iloc[-1] > ma50.iloc[-1]: score += 1
+        if vol_ratio > 1.2: score += 1
 
-        # 支撐壓力
         support = float(close.rolling(20).min().iloc[-1])
         resistance = float(close.rolling(20).max().iloc[-1])
 
@@ -115,44 +107,76 @@ def get_stock_report(ticker):
         }
 
     except Exception as e:
-        print(f"Error: {e}")
+        print(e)
         return None
 
 
 # ========================
-# 基本面
+# 基本面（台股 + 美股）
 # ========================
 def get_fundamental_score(ticker):
     try:
-        # 台股（暫簡化）
+        # ===== 台股（FinMind）=====
         if ticker.isdigit():
-            return {
-                "score": 2,
-                "level": "中性",
-                "pe": None,
-                "gross_margin": None,
-                "revenue_growth": None,
-                "eps_growth": None
-            }
+            start_date = (datetime.now() - timedelta(days=900)).strftime('%Y-%m-%d')
 
-        stock = yf.Ticker(ticker)
-        info = stock.info
+            # 營收 YoY
+            rev = dl.taiwan_stock_month_revenue(stock_id=ticker, start_date=start_date)
+            rev = rev.sort_values("date")
+            revenue_growth = None
+            if len(rev) >= 13:
+                revenue_growth = (rev.iloc[-1]["revenue"] - rev.iloc[-13]["revenue"]) / rev.iloc[-13]["revenue"]
 
+            # EPS
+            fs = dl.taiwan_stock_financial_statements(stock_id=ticker, start_date=start_date)
+            eps_df = fs[fs["type"] == "EPS"].sort_values("date")
+            eps_growth = None
+            if len(eps_df) >= 8:
+                last4 = eps_df.tail(4)["value"].sum()
+                prev4 = eps_df.tail(8).head(4)["value"].sum()
+                eps_growth = (last4 - prev4) / prev4 if prev4 else None
+
+            # 毛利率
+            gm_df = fs[fs["type"] == "GrossMargin"].sort_values("date")
+            gross_margin = float(gm_df.iloc[-1]["value"]) / 100 if len(gm_df) > 0 else None
+
+            # P/E
+            pe_df = dl.taiwan_stock_per_pbr(stock_id=ticker, start_date=start_date)
+            pe_df = pe_df.sort_values("date")
+            pe = float(pe_df.iloc[-1]["per"]) if len(pe_df) > 0 else None
+
+        # ===== 美股（yfinance）=====
+        else:
+            tk = yf.Ticker(ticker)
+            info = tk.info
+
+            pe = info.get("trailingPE")
+            gross_margin = info.get("grossMargins")
+
+            # EPS成長（用 earnings）
+            qe = tk.quarterly_earnings
+            eps_growth = None
+            if isinstance(qe, pd.DataFrame) and len(qe) >= 8:
+                last4 = qe.tail(4)["Earnings"].sum()
+                prev4 = qe.tail(8).head(4)["Earnings"].sum()
+                eps_growth = (last4 - prev4) / prev4 if prev4 else None
+
+            # 營收成長
+            qf = tk.quarterly_financials
+            revenue_growth = None
+            if isinstance(qf, pd.DataFrame) and "Total Revenue" in qf.index:
+                cols = list(qf.columns)
+                if len(cols) >= 8:
+                    last4 = qf.loc["Total Revenue", cols[:4]].sum()
+                    prev4 = qf.loc["Total Revenue", cols[4:8]].sum()
+                    revenue_growth = (last4 - prev4) / prev4 if prev4 else None
+
+        # 評分
         score = 0
-
-        pe = info.get("trailingPE")
-        gross_margin = info.get("grossMargins")
-        revenue_growth = info.get("revenueGrowth")
-        eps_growth = info.get("earningsGrowth")
-
-        if eps_growth and eps_growth > 0:
-            score += 1
-        if revenue_growth and revenue_growth > 0:
-            score += 1
-        if gross_margin and gross_margin > 0.3:
-            score += 1
-        if pe and 10 <= pe <= 25:
-            score += 1
+        if eps_growth and eps_growth > 0: score += 1
+        if revenue_growth and revenue_growth > 0: score += 1
+        if gross_margin and gross_margin > 0.3: score += 1
+        if pe and 10 <= pe <= 25: score += 1
 
         if score <= 1:
             level = "偏弱"
@@ -171,5 +195,5 @@ def get_fundamental_score(ticker):
         }
 
     except Exception as e:
-        print(f"fundamental error: {e}")
+        print(e)
         return {"score": 0, "level": "未知"}
