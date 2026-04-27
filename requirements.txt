@@ -3,4 +3,5 @@ google-generativeai
 pandas
 FinMind
 yahooquery
+yfinance
 python-dotenv
